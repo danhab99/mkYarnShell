@@ -13,20 +13,58 @@
         };
         lib = pkgs.lib;
 
-        node-modules = pkgs.mkYarnPackage {
-          name = "node-modules";
-          src = ./.;
-        };
+        readNamePackageJson = { packageJsonPath }:
+          let
+            # Read the file contents
+            packageJsonContents = builtins.readFile packageJsonPath;
+
+            # Parse the JSON
+            packageData = builtins.fromJSON packageJsonContents;
+
+            # Extract the name
+            packageName = packageData.name;
+          in
+            packageName;
+
+        mkYarnShell = yarnShellInputs@{
+          src
+          ,node_modules_name ? "default"
+          ,...
+        }: let
+          name = readNamePackageJson {
+            packageJsonPath = src + "/package.json";
+          };
+
+        in pkgs.mkShell (yarnShellInputs // {
+          shellHook = ''
+              flake_path=".#node_modules.$(uname -m)-linux.${node_modules_name}"
+              nix build $flake_path --no-link
+              echo $flake_path
+              node_path=$(nix path-info $flake_path)
+              echo $node_path 
+              rm -rf ./node_modules
+              ln -s $node_path/libexec/${name}/node_modules ./node_modules
+
+              ${yarnShellInputs.shellHook}
+          '';
+        });
 
       in {
+        # packages.node_modules.default = pkgs.mkYarnPackage {
         node_modules.default = pkgs.mkYarnPackage {
-          name = "node-modules";
+          name = "yarn-project";
           src = ./.;
         };
 
+        node_modules.project1 = pkgs.mkYarnPackage {
+          name = "project1";
+          src = ./project1;
+        };
 
         devShells = {
-          default = pkgs.mkShell {
+          default = mkYarnShell {
+            src = ./.;
+
             packages = with pkgs; [
               gnumake
               nodejs_22
@@ -34,17 +72,25 @@
               prettierd
             ];
 
-            PRISMA_QUERY_ENGINE_LIBRARY =
-              "${pkgs.prisma-engines}/lib/libquery_engine.node";
-            PRISMA_QUERY_ENGINE_BINARY =
-              "${pkgs.prisma-engines}/bin/query-engine";
-            PRISMA_SCHEMA_ENGINE_BINARY =
-              "${pkgs.prisma-engines}/bin/schema-engine";
-
-            DATABASE_PATH="file:/home/dan/Documents/node/mcp-server/db";
             shellHook = ''
-            export DATABASE_PATH="file:$(dirname $(realpath $(git rev-parse --git-dir)) )/db"
-            zsh
+              zsh
+            '';
+          };
+
+
+          project1 = mkYarnShell {
+            src = ./project1;
+            node_modules_name = "project1";
+
+            packages = with pkgs; [
+              gnumake
+              nodejs_22
+              yarn 
+              prettierd
+            ];
+
+            shellHook = ''
+              zsh
             '';
           };
         };
