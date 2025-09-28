@@ -1,5 +1,5 @@
 {
-  description = "Flake exporting mkNodeModulesShell and mkYarnNodeModules";
+  description = "Devshell that is always ready to use node_modules";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
@@ -25,6 +25,11 @@
             };
           in
             pkgs.mkShell (args // {
+
+              packages = with pkgs; [
+                yarn 
+              ] ++ args.packages;
+               
               shellHook = ''
                 flake_path=".#node_modules.$(uname -m)-linux.${node_modules_name}"
                 nix build $flake_path --no-link
@@ -38,20 +43,11 @@
               '';
             });
 
-        mkYarnNodeModules = { name, src }:
-          let
-            package = pkgs.mkYarnPackage { inherit name src; };
-          in {
-            node_modules_path = "${package}/libexec/${name}/node_modules";
-          };
+        mkYarnNodeModules = { name, src }: pkgs.mkYarnPackage { inherit name src; };
 
       in {
-        # Ready-to-use default dev shell
-        # devShells.default = mkNodeModulesShell { src = ./.; };
-
-        # Export builder functions for reuse (system-dependent)
         lib = {
-          inherit mkNodeModulesShell mkYarnNodeModules readNamePackageJson;
+          inherit mkNodeModulesShell mkYarnNodeModules;
         };
       }
     );
